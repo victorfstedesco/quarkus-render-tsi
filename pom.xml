@@ -19,6 +19,8 @@
         <maven.compiler.target>23</maven.compiler.target>
     </properties>
 
+
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -35,6 +37,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.validator</groupId>
+            <artifactId>hibernate-validator</artifactId>
+            <version>8.0.0.Final</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
