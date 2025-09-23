@@ -5,11 +5,27 @@
 -- insert into myentity (id, field) values(3, 'field-3');
 -- alter sequence myentity_seq restart with 4;
 
-INSERT INTO brand (id, name, description, logoUrl, websiteUrl, release) VALUES
-(1, 'Nike', 'Leading global supplier of athletic shoes and apparel.', 'https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg', 'https://www.nike.com', 1),
-(2, 'Adidas', 'Global company specializing in sports footwear and apparel.', 'https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg', 'https://www.adidas.com', 1),
-(3, 'Apple', 'Technology company known for consumer electronics and software.', 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg', 'https://www.apple.com', 1),
-(4, 'Samsung', 'Multinational conglomerate specializing in electronics and appliances.', 'https://upload.wikimedia.org/wikipedia/commons/2/24/Samsung_Logo.svg', 'https://www.samsung.com', 1),
-(5, 'Google', 'Global leader in internet-related products and services.', 'https://upload.wikimedia.org/wikipedia/commons/2/2f/Google_2015_logo.svg', 'https://www.google.com', 1);
+INSERT INTO segment (name, description) VALUES
+('Tecnologia', 'Segmento voltado a empresas de tecnologia e inovação'),
+('Finanças', 'Empresas do setor financeiro, bancos e serviços correlatos'),
+('Saúde', 'Empresas de produtos e serviços da área da saúde'),
+('Entretenimento', 'Empresas de mídia, streaming e entretenimento digital');
+
+INSERT INTO image (url, description) VALUES
+('https://example.com/logos/google.png', 'Logo da Google'),
+('https://example.com/logos/apple.png', 'Logo da Apple'),
+('https://example.com/logos/banco_do_brasil.png', 'Logo do Banco do Brasil'),
+('https://example.com/logos/pfizer.png', 'Logo da Pfizer'),
+('https://example.com/logos/netflix.png', 'Logo da Netflix');
+
+
+
+INSERT INTO brand (name, description, logo_id, website_url, release, segment_id) VALUES
+('Google', 'Empresa líder em tecnologia e serviços on-line', 1, 'https://www.google.com', 1998, 1),
+('Apple', 'Fabricante de eletrônicos, software e serviços digitais', 2, 'https://www.apple.com', 1976, 1),
+('Banco do Brasil', 'Banco público brasileiro de grande porte', 3, 'https://www.bb.com.br', 1808, 2),
+('Pfizer', 'Gigante da indústria farmacêutica e de saúde', 4, 'https://www.pfizer.com', 1849, 3),
+('Netflix', 'Empresa líder mundial em streaming de vídeos', 5, 'https://www.netflix.com', 1997, 4);
+
 
 -- alter sequence book_seq restart with 5;

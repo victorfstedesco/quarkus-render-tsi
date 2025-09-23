@@ -16,51 +16,51 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import java.util.List;
 import java.util.Set;
 
-@Path("/brand")
-public class BrandResource {
+@Path("/segment")
+public class SegmentResource {
 
     @GET
     @Operation(
-            summary = "Todas as marcas (getAll)",
-            description = "Lista de marcas no formato JSON"
+            summary = "Todos os segmentos (getAll)",
+            description = "Lista de segmentos no formato JSON"
     )
     @APIResponse(
             responseCode = "200",
             description = "Sucesso",
             content = @Content(
                     mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
+                    schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY)
             )
     )
     public Response getAll() {
-        return Response.ok(Brand.listAll()).build();
+        return Response.ok(Segment.listAll()).build();
     }
 
     @GET
     @Path("{id}")
     @Operation(
-            summary = "Marca por ID",
-            description = "Retorna uma marca específica pelo ID"
+            summary = "Segmento por ID",
+            description = "Retorna um segmento específico pelo ID"
     )
     @APIResponse(
             responseCode = "200",
             description = "Sucesso",
             content = @Content(
                     mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
+                    schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY)
             )
     )
     @APIResponse(
             responseCode = "404",
-            description = "Marca não encontrada",
+            description = "Segmento não encontrado",
             content = @Content(
                     mediaType = "text/plain",
                     schema = @Schema(implementation = String.class))
     )
     public Response getById(
-            @Parameter(description = "ID da marca para busca", required = true)
+            @Parameter(description = "ID do segmento para busca", required = true)
             @PathParam("id") long id) {
-        Brand entity = Brand.findById(id);
+        Segment entity = Segment.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
@@ -69,7 +69,7 @@ public class BrandResource {
 
     @GET
     @Operation(
-            summary = "Todas as marcas com função de busca",
+            summary = "Todos os segmentos com função de busca",
             description = "Todos os resultados no formato JSON"
     )
     @APIResponse(
@@ -77,12 +77,12 @@ public class BrandResource {
             description = "Sucesso",
             content = @Content(
                     mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
+                    schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY)
             )
     )
     @Path("/search")
     public Response search(
-            @Parameter(description = "Consulta para busca por nome, segmento, etc")
+            @Parameter(description = "Consulta para busca por nome ou descrição")
             @QueryParam("q") String q,
             @Parameter(description = "Campo para ordenação da lista")
             @QueryParam("sort") @DefaultValue("id") String sort,
@@ -93,7 +93,7 @@ public class BrandResource {
             @Parameter(description = "Quantidade de itens por página")
             @QueryParam("size") @DefaultValue("4") int size
     ) {
-        Set<String> allowed = Set.of("id", "name", "description", "websiteUrl", "release");
+        Set<String> allowed = Set.of("id", "name", "description");
         if (!allowed.contains(sort)) {
             sort = "id";
         }
@@ -105,44 +105,36 @@ public class BrandResource {
 
         int effectivePage = Math.max(page, 0);
 
-        PanacheQuery<Brand> query;
+        PanacheQuery<Segment> query;
 
         if (q == null || q.isBlank()) {
-            query = Brand.findAll(sortObj);
+            query = Segment.findAll(sortObj);
         } else {
-            try {
-                int numero = Integer.parseInt(q);
-                query = Brand.find("release = ?1", sortObj, numero);
-            } catch (NumberFormatException e) {
-                query = Brand.find("lower(name) like ?1", sortObj, "%" + q.toLowerCase() + "%");
-            }
+            query = Segment.find(
+                    "lower(name) like ?1 or lower(description) like ?1",
+                    sortObj,
+                    "%" + q.toLowerCase() + "%"
+            );
         }
 
-        List<Brand> brands = query.page(effectivePage, size).list();
+        List<Segment> segments = query.page(effectivePage, size).list();
 
-        var response = new SearchBrandResponse();
-        response.Brand = brands;
-        response.TotalBrand = query.list().size();
-        response.TotalPages = query.pageCount();
-        response.HasMore = effectivePage < query.pageCount() - 1;
-        response.NextPage = response.HasMore ? "http://localhost:8080/brand/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) + (size > 0 ? "&size=" + size : "") : "";
-
-        return Response.ok(response).build();
+        return Response.ok(segments).build();
     }
 
     @POST
     @Operation(
-            summary = "Inserir marca",
-            description = "Adiciona uma marca via POST com corpo JSON"
+            summary = "Inserir segmento",
+            description = "Adiciona um segmento via POST com corpo JSON"
     )
     @RequestBody(
             required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class))
     )
     @APIResponse(
             responseCode = "201",
-            description = "Marca criada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
+            description = "Segmento criado com sucesso",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class))
     )
     @APIResponse(
             responseCode = "400",
@@ -150,21 +142,15 @@ public class BrandResource {
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
     )
     @Transactional
-    public Response insert(Brand brand) {
-        if(brand.logo != null && brand.logo.id != null) {
-            brand.logo = Image.findById(brand.logo.id);
-        }
-        if(brand.segment != null && brand.segment.id != null) {
-            brand.segment = Segment.findById(brand.segment.id);
-        }
-        Brand.persist(brand);
-        return Response.status(Response.Status.CREATED).entity(brand).build();
+    public Response insert(Segment segment) {
+        Segment.persist(segment);
+        return Response.status(Response.Status.CREATED).entity(segment).build();
     }
 
     @DELETE
     @Operation(
-            summary = "Deletar marca",
-            description = "Remove uma marca pelo ID"
+            summary = "Deletar segmento",
+            description = "Remove um segmento pelo ID"
     )
     @APIResponse(
             responseCode = "204",
@@ -173,58 +159,48 @@ public class BrandResource {
     )
     @APIResponse(
             responseCode = "404",
-            description = "Marca não encontrada",
+            description = "Segmento não encontrado",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
     )
     @Transactional
     @Path("{id}")
     public Response delete(@PathParam("id") long id) {
-        Brand entity = Brand.findById(id);
+        Segment entity = Segment.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
-        Brand.deleteById(id);
+        Segment.deleteById(id);
         return Response.noContent().build();
     }
 
     @PUT
     @Operation(
-            summary = "Editar marca",
-            description = "Edita uma marca pelo ID e corpo JSON"
+            summary = "Editar segmento",
+            description = "Edita um segmento pelo ID e corpo JSON"
     )
     @RequestBody(
             required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class))
     )
     @APIResponse(
             responseCode = "200",
-            description = "Marca editada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY))
+            description = "Segmento editado com sucesso",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY))
     )
     @APIResponse(
             responseCode = "404",
-            description = "Marca não encontrada",
+            description = "Segmento não encontrado",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
     )
     @Transactional
     @Path("{id}")
-    public Response update(@PathParam("id") long id, Brand newBrand) {
-        Brand entity = Brand.findById(id);
+    public Response update(@PathParam("id") long id, Segment newSegment) {
+        Segment entity = Segment.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
-        entity.name = newBrand.name;
-        entity.description = newBrand.description;
-
-        if(newBrand.logo != null && newBrand.logo.id != null)
-            entity.logo = Image.findById(newBrand.logo.id);
-
-        entity.websiteUrl = newBrand.websiteUrl;
-        entity.release = newBrand.release;
-
-        if(newBrand.segment != null && newBrand.segment.id != null)
-            entity.segment = Segment.findById(newBrand.segment.id);
-
+        entity.name = newSegment.name;
+        entity.description = newSegment.description;
         return Response.status(Response.Status.OK).entity(entity).build();
     }
 }

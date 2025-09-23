@@ -16,51 +16,51 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import java.util.List;
 import java.util.Set;
 
-@Path("/brand")
-public class BrandResource {
+@Path("/image")
+public class ImageResource {
 
     @GET
     @Operation(
-            summary = "Todas as marcas (getAll)",
-            description = "Lista de marcas no formato JSON"
+            summary = "Todas as imagens (getAll)",
+            description = "Lista de imagens no formato JSON"
     )
     @APIResponse(
             responseCode = "200",
             description = "Sucesso",
             content = @Content(
                     mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
+                    schema = @Schema(implementation = Image.class, type = SchemaType.ARRAY)
             )
     )
     public Response getAll() {
-        return Response.ok(Brand.listAll()).build();
+        return Response.ok(Image.listAll()).build();
     }
 
     @GET
     @Path("{id}")
     @Operation(
-            summary = "Marca por ID",
-            description = "Retorna uma marca específica pelo ID"
+            summary = "Imagem por ID",
+            description = "Retorna uma imagem específica pelo ID"
     )
     @APIResponse(
             responseCode = "200",
             description = "Sucesso",
             content = @Content(
                     mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
+                    schema = @Schema(implementation = Image.class, type = SchemaType.ARRAY)
             )
     )
     @APIResponse(
             responseCode = "404",
-            description = "Marca não encontrada",
+            description = "Imagem não encontrada",
             content = @Content(
                     mediaType = "text/plain",
                     schema = @Schema(implementation = String.class))
     )
     public Response getById(
-            @Parameter(description = "ID da marca para busca", required = true)
+            @Parameter(description = "ID da imagem para busca", required = true)
             @PathParam("id") long id) {
-        Brand entity = Brand.findById(id);
+        Image entity = Image.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
@@ -69,7 +69,7 @@ public class BrandResource {
 
     @GET
     @Operation(
-            summary = "Todas as marcas com função de busca",
+            summary = "Todas as imagens com função de busca",
             description = "Todos os resultados no formato JSON"
     )
     @APIResponse(
@@ -77,12 +77,12 @@ public class BrandResource {
             description = "Sucesso",
             content = @Content(
                     mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
+                    schema = @Schema(implementation = Image.class, type = SchemaType.ARRAY)
             )
     )
     @Path("/search")
     public Response search(
-            @Parameter(description = "Consulta para busca por nome, segmento, etc")
+            @Parameter(description = "Consulta para busca por url ou descrição")
             @QueryParam("q") String q,
             @Parameter(description = "Campo para ordenação da lista")
             @QueryParam("sort") @DefaultValue("id") String sort,
@@ -93,7 +93,7 @@ public class BrandResource {
             @Parameter(description = "Quantidade de itens por página")
             @QueryParam("size") @DefaultValue("4") int size
     ) {
-        Set<String> allowed = Set.of("id", "name", "description", "websiteUrl", "release");
+        Set<String> allowed = Set.of("id", "url", "description");
         if (!allowed.contains(sort)) {
             sort = "id";
         }
@@ -105,44 +105,36 @@ public class BrandResource {
 
         int effectivePage = Math.max(page, 0);
 
-        PanacheQuery<Brand> query;
+        PanacheQuery<Image> query;
 
         if (q == null || q.isBlank()) {
-            query = Brand.findAll(sortObj);
+            query = Image.findAll(sortObj);
         } else {
-            try {
-                int numero = Integer.parseInt(q);
-                query = Brand.find("release = ?1", sortObj, numero);
-            } catch (NumberFormatException e) {
-                query = Brand.find("lower(name) like ?1", sortObj, "%" + q.toLowerCase() + "%");
-            }
+            query = Image.find(
+                    "lower(url) like ?1 or lower(description) like ?1",
+                    sortObj,
+                    "%" + q.toLowerCase() + "%"
+            );
         }
 
-        List<Brand> brands = query.page(effectivePage, size).list();
+        List<Image> images = query.page(effectivePage, size).list();
 
-        var response = new SearchBrandResponse();
-        response.Brand = brands;
-        response.TotalBrand = query.list().size();
-        response.TotalPages = query.pageCount();
-        response.HasMore = effectivePage < query.pageCount() - 1;
-        response.NextPage = response.HasMore ? "http://localhost:8080/brand/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) + (size > 0 ? "&size=" + size : "") : "";
-
-        return Response.ok(response).build();
+        return Response.ok(images).build();
     }
 
     @POST
     @Operation(
-            summary = "Inserir marca",
-            description = "Adiciona uma marca via POST com corpo JSON"
+            summary = "Inserir imagem",
+            description = "Adiciona uma imagem via POST com corpo JSON"
     )
     @RequestBody(
             required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class))
     )
     @APIResponse(
             responseCode = "201",
-            description = "Marca criada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
+            description = "Imagem criada com sucesso",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class))
     )
     @APIResponse(
             responseCode = "400",
@@ -150,21 +142,15 @@ public class BrandResource {
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
     )
     @Transactional
-    public Response insert(Brand brand) {
-        if(brand.logo != null && brand.logo.id != null) {
-            brand.logo = Image.findById(brand.logo.id);
-        }
-        if(brand.segment != null && brand.segment.id != null) {
-            brand.segment = Segment.findById(brand.segment.id);
-        }
-        Brand.persist(brand);
-        return Response.status(Response.Status.CREATED).entity(brand).build();
+    public Response insert(Image image) {
+        Image.persist(image);
+        return Response.status(Response.Status.CREATED).entity(image).build();
     }
 
     @DELETE
     @Operation(
-            summary = "Deletar marca",
-            description = "Remove uma marca pelo ID"
+            summary = "Deletar imagem",
+            description = "Remove uma imagem pelo ID"
     )
     @APIResponse(
             responseCode = "204",
@@ -173,58 +159,48 @@ public class BrandResource {
     )
     @APIResponse(
             responseCode = "404",
-            description = "Marca não encontrada",
+            description = "Imagem não encontrada",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
     )
     @Transactional
     @Path("{id}")
     public Response delete(@PathParam("id") long id) {
-        Brand entity = Brand.findById(id);
+        Image entity = Image.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
-        Brand.deleteById(id);
+        Image.deleteById(id);
         return Response.noContent().build();
     }
 
     @PUT
     @Operation(
-            summary = "Editar marca",
-            description = "Edita uma marca pelo ID e corpo JSON"
+            summary = "Editar imagem",
+            description = "Edita uma imagem pelo ID e corpo JSON"
     )
     @RequestBody(
             required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class))
     )
     @APIResponse(
             responseCode = "200",
-            description = "Marca editada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY))
+            description = "Imagem editada com sucesso",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class, type = SchemaType.ARRAY))
     )
     @APIResponse(
             responseCode = "404",
-            description = "Marca não encontrada",
+            description = "Imagem não encontrada",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
     )
     @Transactional
     @Path("{id}")
-    public Response update(@PathParam("id") long id, Brand newBrand) {
-        Brand entity = Brand.findById(id);
+    public Response update(@PathParam("id") long id, Image newImage) {
+        Image entity = Image.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
-        entity.name = newBrand.name;
-        entity.description = newBrand.description;
-
-        if(newBrand.logo != null && newBrand.logo.id != null)
-            entity.logo = Image.findById(newBrand.logo.id);
-
-        entity.websiteUrl = newBrand.websiteUrl;
-        entity.release = newBrand.release;
-
-        if(newBrand.segment != null && newBrand.segment.id != null)
-            entity.segment = Segment.findById(newBrand.segment.id);
-
+        entity.url = newImage.url;
+        entity.description = newImage.description;
         return Response.status(Response.Status.OK).entity(entity).build();
     }
 }
