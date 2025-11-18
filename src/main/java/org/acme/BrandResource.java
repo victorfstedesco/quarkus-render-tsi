@@ -2,9 +2,15 @@ package org.acme;
 
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Sort;
+import io.smallrye.faulttolerance.api.RateLimit;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
+
+import org.eclipse.microprofile.faulttolerance.CircuitBreaker;
+import org.eclipse.microprofile.faulttolerance.Fallback;
+import org.eclipse.microprofile.faulttolerance.Timeout;
+
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
@@ -13,6 +19,7 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,10 +27,19 @@ import java.util.Set;
 @Path("/brand")
 public class BrandResource {
 
-    // --------------------------
+    // =========================================================
     // GET ALL
-    // --------------------------
+    // =========================================================
     @GET
+    @Timeout(30000)
+    @RateLimit(value = 10, window = 10, windowUnit = ChronoUnit.SECONDS)
+    @CircuitBreaker(
+            requestVolumeThreshold = 4,
+            failureRatio = 0.5,
+            delay = 5000,
+            successThreshold = 1
+    )
+    @Fallback(fallbackMethod = "getAllFallback")
     @Operation(summary = "Todas as marcas (getAll)", description = "Lista de marcas no formato JSON")
     @APIResponse(responseCode = "200", description = "Sucesso",
             content = @Content(mediaType = "application/json",
@@ -32,7 +48,6 @@ public class BrandResource {
 
         List<Brand> list = Brand.listAll();
 
-        // HATEOAS para cada item
         list.forEach(b -> {
             b.links = Map.of(
                     "self", "/brand/" + b.id,
@@ -45,25 +60,38 @@ public class BrandResource {
         return Response.ok(list).build();
     }
 
-    // --------------------------
+    public Response getAllFallback() {
+        return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity("Serviço indisponível no momento. (brand.getAll)")
+                .build();
+    }
+
+
+    // =========================================================
     // GET BY ID
-    // --------------------------
+    // =========================================================
     @GET
     @Path("{id}")
+    @Timeout(25000)
+    @RateLimit(value = 8, window = 10, windowUnit = ChronoUnit.SECONDS)
+    @CircuitBreaker(
+            requestVolumeThreshold = 4,
+            failureRatio = 0.5,
+            delay = 5000,
+            successThreshold = 1
+    )
+    @Fallback(fallbackMethod = "getByIdFallback")
     @Operation(summary = "Marca por ID", description = "Retorna uma marca específica pelo ID")
     @APIResponse(responseCode = "200", description = "Sucesso",
             content = @Content(mediaType = "application/json",
                     schema = @Schema(implementation = Brand.class)))
-    @APIResponse(responseCode = "404", description = "Marca não encontrada")
-    public Response getById(@Parameter(description = "ID da marca", required = true)
-                            @PathParam("id") long id) {
+    public Response getById(@PathParam("id") long id) {
 
         Brand entity = Brand.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
-        // HATEOAS
         entity.links = Map.of(
                 "self", "/brand/" + id,
                 "update", "/brand/" + id,
@@ -74,13 +102,28 @@ public class BrandResource {
         return Response.ok(entity).build();
     }
 
-    // --------------------------
+    public Response getByIdFallback(long id) {
+        return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity("Falha ao buscar marca id=" + id)
+                .build();
+    }
+
+
+    // =========================================================
     // SEARCH
-    // --------------------------
+    // =========================================================
     @GET
     @Path("/search")
-    @Operation(summary = "Todas as marcas com função de busca",
-            description = "Todos os resultados no formato JSON")
+    @Timeout(15000)
+    @RateLimit(value = 7, window = 10, windowUnit = ChronoUnit.SECONDS)
+    @CircuitBreaker(
+            requestVolumeThreshold = 4,
+            failureRatio = 0.5,
+            delay = 5000,
+            successThreshold = 1
+    )
+    @Fallback(fallbackMethod = "searchFallback")
+    @Operation(summary = "Busca marcas", description = "Busca com paginação e ordenação")
     public Response search(
             @QueryParam("q") String q,
             @QueryParam("sort") @DefaultValue("id") String sort,
@@ -94,7 +137,8 @@ public class BrandResource {
 
         Sort sortObj = Sort.by(
                 sort,
-                "desc".equalsIgnoreCase(direction) ? Sort.Direction.Descending : Sort.Direction.Ascending
+                direction.equalsIgnoreCase("desc") ?
+                        Sort.Direction.Descending : Sort.Direction.Ascending
         );
 
         int effectivePage = Math.max(page, 0);
@@ -114,7 +158,6 @@ public class BrandResource {
 
         List<Brand> brands = query.page(effectivePage, size).list();
 
-        // HATEOAS em cada item
         brands.forEach(b -> {
             b.links = Map.of(
                     "self", "/brand/" + b.id,
@@ -129,20 +172,34 @@ public class BrandResource {
         response.TotalBrand = query.list().size();
         response.TotalPages = query.pageCount();
         response.HasMore = effectivePage < query.pageCount() - 1;
-        response.NextPage = response.HasMore
-                ? "/brand/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) + "&size=" + size
-                : "";
+        response.NextPage = response.HasMore ?
+                "/brand/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) :
+                "";
 
         return Response.ok(response).build();
     }
 
-    // --------------------------
+    public Response searchFallback(String q, String sort, String direction, int page, int size) {
+        return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity("Serviço indisponível na busca de marcas.")
+                .build();
+    }
+
+
+    // =========================================================
     // INSERT
-    // --------------------------
+    // =========================================================
     @POST
-    @Operation(summary = "Inserir marca", description = "Adiciona uma marca via POST")
-    @RequestBody(required = true, content = @Content(mediaType = "application/json",
-            schema = @Schema(implementation = Brand.class)))
+    @Timeout(10000)
+    @RateLimit(value = 3, window = 10, windowUnit = ChronoUnit.SECONDS)
+    @CircuitBreaker(
+            requestVolumeThreshold = 3,
+            failureRatio = 0.5,
+            delay = 10000,
+            successThreshold = 1
+    )
+    @Fallback(fallbackMethod = "insertFallback")
+    @Operation(summary = "Inserir marca", description = "Adiciona uma nova marca")
     @Transactional
     public Response insert(Brand brand) {
 
@@ -154,7 +211,6 @@ public class BrandResource {
 
         Brand.persist(brand);
 
-        // HATEOAS
         brand.links = Map.of(
                 "self", "/brand/" + brand.id,
                 "update", "/brand/" + brand.id,
@@ -165,33 +221,65 @@ public class BrandResource {
         return Response.status(Response.Status.CREATED).entity(brand).build();
     }
 
-    // --------------------------
+    public Response insertFallback(Brand brand) {
+        return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity("Falha ao inserir marca.")
+                .build();
+    }
+
+
+    // =========================================================
     // DELETE
-    // --------------------------
+    // =========================================================
     @DELETE
     @Path("{id}")
+    @Timeout(10000)
+    @RateLimit(value = 3, window = 10, windowUnit = ChronoUnit.SECONDS)
+    @CircuitBreaker(
+            requestVolumeThreshold = 3,
+            failureRatio = 0.5,
+            delay = 10000,
+            successThreshold = 1
+    )
+    @Fallback(fallbackMethod = "deleteFallback")
     @Transactional
     public Response delete(@PathParam("id") long id) {
+
         Brand entity = Brand.findById(id);
-        if (entity == null) {
+        if (entity == null)
             return Response.status(Response.Status.NOT_FOUND).build();
-        }
+
         Brand.deleteById(id);
         return Response.noContent().build();
     }
 
-    // --------------------------
+    public Response deleteFallback(long id) {
+        return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity("Falha ao deletar marca id=" + id)
+                .build();
+    }
+
+
+    // =========================================================
     // UPDATE
-    // --------------------------
+    // =========================================================
     @PUT
     @Path("{id}")
+    @Timeout(20000)
+    @RateLimit(value = 3, window = 10, windowUnit = ChronoUnit.SECONDS)
+    @CircuitBreaker(
+            requestVolumeThreshold = 3,
+            failureRatio = 0.5,
+            delay = 10000,
+            successThreshold = 1
+    )
+    @Fallback(fallbackMethod = "updateFallback")
     @Transactional
     public Response update(@PathParam("id") long id, Brand newBrand) {
 
         Brand entity = Brand.findById(id);
-        if (entity == null) {
+        if (entity == null)
             return Response.status(Response.Status.NOT_FOUND).build();
-        }
 
         entity.name = newBrand.name;
         entity.description = newBrand.description;
@@ -204,7 +292,6 @@ public class BrandResource {
         if (newBrand.segment != null && newBrand.segment.id != null)
             entity.segment = Segment.findById(newBrand.segment.id);
 
-        // HATEOAS
         entity.links = Map.of(
                 "self", "/brand/" + entity.id,
                 "update", "/brand/" + entity.id,
@@ -213,5 +300,11 @@ public class BrandResource {
         );
 
         return Response.ok(entity).build();
+    }
+
+    public Response updateFallback(long id, Brand newBrand) {
+        return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity("Falha ao atualizar marca id=" + id)
+                .build();
     }
 }
