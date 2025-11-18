@@ -14,89 +14,83 @@ import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Path("/brand")
 public class BrandResource {
 
+    // --------------------------
+    // GET ALL
+    // --------------------------
     @GET
-    @Operation(
-            summary = "Todas as marcas (getAll)",
-            description = "Lista de marcas no formato JSON"
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Sucesso",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
-            )
-    )
+    @Operation(summary = "Todas as marcas (getAll)", description = "Lista de marcas no formato JSON")
+    @APIResponse(responseCode = "200", description = "Sucesso",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)))
     public Response getAll() {
-        return Response.ok(Brand.listAll()).build();
+
+        List<Brand> list = Brand.listAll();
+
+        // HATEOAS para cada item
+        list.forEach(b -> {
+            b.links = Map.of(
+                    "self", "/brand/" + b.id,
+                    "update", "/brand/" + b.id,
+                    "delete", "/brand/" + b.id,
+                    "all", "/brand"
+            );
+        });
+
+        return Response.ok(list).build();
     }
 
+    // --------------------------
+    // GET BY ID
+    // --------------------------
     @GET
     @Path("{id}")
-    @Operation(
-            summary = "Marca por ID",
-            description = "Retorna uma marca específica pelo ID"
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Sucesso",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
-            )
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Marca não encontrada",
-            content = @Content(
-                    mediaType = "text/plain",
-                    schema = @Schema(implementation = String.class))
-    )
-    public Response getById(
-            @Parameter(description = "ID da marca para busca", required = true)
-            @PathParam("id") long id) {
+    @Operation(summary = "Marca por ID", description = "Retorna uma marca específica pelo ID")
+    @APIResponse(responseCode = "200", description = "Sucesso",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = Brand.class)))
+    @APIResponse(responseCode = "404", description = "Marca não encontrada")
+    public Response getById(@Parameter(description = "ID da marca", required = true)
+                            @PathParam("id") long id) {
+
         Brand entity = Brand.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
+        // HATEOAS
+        entity.links = Map.of(
+                "self", "/brand/" + id,
+                "update", "/brand/" + id,
+                "delete", "/brand/" + id,
+                "all", "/brand"
+        );
+
         return Response.ok(entity).build();
     }
 
+    // --------------------------
+    // SEARCH
+    // --------------------------
     @GET
-    @Operation(
-            summary = "Todas as marcas com função de busca",
-            description = "Todos os resultados no formato JSON"
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Sucesso",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)
-            )
-    )
     @Path("/search")
+    @Operation(summary = "Todas as marcas com função de busca",
+            description = "Todos os resultados no formato JSON")
     public Response search(
-            @Parameter(description = "Consulta para busca por nome, segmento, etc")
             @QueryParam("q") String q,
-            @Parameter(description = "Campo para ordenação da lista")
             @QueryParam("sort") @DefaultValue("id") String sort,
-            @Parameter(description = "Direção da ordenação: ascendente ou descendente")
             @QueryParam("direction") @DefaultValue("asc") String direction,
-            @Parameter(description = "Número da página a ser retornada")
             @QueryParam("page") @DefaultValue("0") int page,
-            @Parameter(description = "Quantidade de itens por página")
             @QueryParam("size") @DefaultValue("4") int size
     ) {
+
         Set<String> allowed = Set.of("id", "name", "description", "websiteUrl", "release");
-        if (!allowed.contains(sort)) {
-            sort = "id";
-        }
+        if (!allowed.contains(sort)) sort = "id";
 
         Sort sortObj = Sort.by(
                 sort,
@@ -120,64 +114,63 @@ public class BrandResource {
 
         List<Brand> brands = query.page(effectivePage, size).list();
 
+        // HATEOAS em cada item
+        brands.forEach(b -> {
+            b.links = Map.of(
+                    "self", "/brand/" + b.id,
+                    "update", "/brand/" + b.id,
+                    "delete", "/brand/" + b.id,
+                    "all", "/brand"
+            );
+        });
+
         var response = new SearchBrandResponse();
         response.Brand = brands;
         response.TotalBrand = query.list().size();
         response.TotalPages = query.pageCount();
         response.HasMore = effectivePage < query.pageCount() - 1;
-        response.NextPage = response.HasMore ? "http://localhost:8080/brand/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) + (size > 0 ? "&size=" + size : "") : "";
+        response.NextPage = response.HasMore
+                ? "/brand/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) + "&size=" + size
+                : "";
 
         return Response.ok(response).build();
     }
 
+    // --------------------------
+    // INSERT
+    // --------------------------
     @POST
-    @Operation(
-            summary = "Inserir marca",
-            description = "Adiciona uma marca via POST com corpo JSON"
-    )
-    @RequestBody(
-            required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
-    )
-    @APIResponse(
-            responseCode = "201",
-            description = "Marca criada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
-    )
-    @APIResponse(
-            responseCode = "400",
-            description = "Requisição inválida",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
+    @Operation(summary = "Inserir marca", description = "Adiciona uma marca via POST")
+    @RequestBody(required = true, content = @Content(mediaType = "application/json",
+            schema = @Schema(implementation = Brand.class)))
     @Transactional
     public Response insert(Brand brand) {
-        if(brand.logo != null && brand.logo.id != null) {
+
+        if (brand.logo != null && brand.logo.id != null)
             brand.logo = Image.findById(brand.logo.id);
-        }
-        if(brand.segment != null && brand.segment.id != null) {
+
+        if (brand.segment != null && brand.segment.id != null)
             brand.segment = Segment.findById(brand.segment.id);
-        }
+
         Brand.persist(brand);
+
+        // HATEOAS
+        brand.links = Map.of(
+                "self", "/brand/" + brand.id,
+                "update", "/brand/" + brand.id,
+                "delete", "/brand/" + brand.id,
+                "all", "/brand"
+        );
+
         return Response.status(Response.Status.CREATED).entity(brand).build();
     }
 
+    // --------------------------
+    // DELETE
+    // --------------------------
     @DELETE
-    @Operation(
-            summary = "Deletar marca",
-            description = "Remove uma marca pelo ID"
-    )
-    @APIResponse(
-            responseCode = "204",
-            description = "Sem conteúdo",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Marca não encontrada",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
-    @Transactional
     @Path("{id}")
+    @Transactional
     public Response delete(@PathParam("id") long id) {
         Brand entity = Brand.findById(id);
         if (entity == null) {
@@ -187,44 +180,38 @@ public class BrandResource {
         return Response.noContent().build();
     }
 
+    // --------------------------
+    // UPDATE
+    // --------------------------
     @PUT
-    @Operation(
-            summary = "Editar marca",
-            description = "Edita uma marca pelo ID e corpo JSON"
-    )
-    @RequestBody(
-            required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class))
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Marca editada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY))
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Marca não encontrada",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
-    @Transactional
     @Path("{id}")
+    @Transactional
     public Response update(@PathParam("id") long id, Brand newBrand) {
+
         Brand entity = Brand.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
         entity.name = newBrand.name;
         entity.description = newBrand.description;
-
-        if(newBrand.logo != null && newBrand.logo.id != null)
-            entity.logo = Image.findById(newBrand.logo.id);
-
         entity.websiteUrl = newBrand.websiteUrl;
         entity.release = newBrand.release;
 
-        if(newBrand.segment != null && newBrand.segment.id != null)
+        if (newBrand.logo != null && newBrand.logo.id != null)
+            entity.logo = Image.findById(newBrand.logo.id);
+
+        if (newBrand.segment != null && newBrand.segment.id != null)
             entity.segment = Segment.findById(newBrand.segment.id);
 
-        return Response.status(Response.Status.OK).entity(entity).build();
+        // HATEOAS
+        entity.links = Map.of(
+                "self", "/brand/" + entity.id,
+                "update", "/brand/" + entity.id,
+                "delete", "/brand/" + entity.id,
+                "all", "/brand"
+        );
+
+        return Response.ok(entity).build();
     }
 }

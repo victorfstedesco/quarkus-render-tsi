@@ -14,11 +14,15 @@ import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Path("/image")
 public class ImageResource {
 
+    // --------------------------
+    // GET ALL
+    // --------------------------
     @GET
     @Operation(
             summary = "Todas as imagens (getAll)",
@@ -33,9 +37,25 @@ public class ImageResource {
             )
     )
     public Response getAll() {
-        return Response.ok(Image.listAll()).build();
+
+        List<Image> list = Image.listAll();
+
+        // HATEOAS
+        list.forEach(img -> {
+            img.links = Map.of(
+                    "self", "/image/" + img.id,
+                    "update", "/image/" + img.id,
+                    "delete", "/image/" + img.id,
+                    "all", "/image"
+            );
+        });
+
+        return Response.ok(list).build();
     }
 
+    // --------------------------
+    // GET BY ID
+    // --------------------------
     @GET
     @Path("{id}")
     @Operation(
@@ -52,55 +72,52 @@ public class ImageResource {
     )
     @APIResponse(
             responseCode = "404",
-            description = "Imagem não encontrada",
-            content = @Content(
-                    mediaType = "text/plain",
-                    schema = @Schema(implementation = String.class))
+            description = "Imagem não encontrada"
     )
     public Response getById(
-            @Parameter(description = "ID da imagem para busca", required = true)
+            @Parameter(description = "ID da imagem", required = true)
             @PathParam("id") long id) {
+
         Image entity = Image.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
+        // HATEOAS
+        entity.links = Map.of(
+                "self", "/image/" + id,
+                "update", "/image/" + id,
+                "delete", "/image/" + id,
+                "all", "/image"
+        );
+
         return Response.ok(entity).build();
     }
 
+    // --------------------------
+    // SEARCH
+    // --------------------------
     @GET
+    @Path("/search")
     @Operation(
             summary = "Todas as imagens com função de busca",
             description = "Todos os resultados no formato JSON"
     )
-    @APIResponse(
-            responseCode = "200",
-            description = "Sucesso",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = Image.class, type = SchemaType.ARRAY)
-            )
-    )
-    @Path("/search")
+    @APIResponse(responseCode = "200", description = "Sucesso")
     public Response search(
-            @Parameter(description = "Consulta para busca por url ou descrição")
             @QueryParam("q") String q,
-            @Parameter(description = "Campo para ordenação da lista")
             @QueryParam("sort") @DefaultValue("id") String sort,
-            @Parameter(description = "Direção da ordenação: ascendente ou descendente")
             @QueryParam("direction") @DefaultValue("asc") String direction,
-            @Parameter(description = "Número da página a ser retornada")
             @QueryParam("page") @DefaultValue("0") int page,
-            @Parameter(description = "Quantidade de itens por página")
             @QueryParam("size") @DefaultValue("4") int size
     ) {
         Set<String> allowed = Set.of("id", "url", "description");
-        if (!allowed.contains(sort)) {
-            sort = "id";
-        }
+        if (!allowed.contains(sort)) sort = "id";
 
         Sort sortObj = Sort.by(
                 sort,
-                "desc".equalsIgnoreCase(direction) ? Sort.Direction.Descending : Sort.Direction.Ascending
+                "desc".equalsIgnoreCase(direction) ?
+                        Sort.Direction.Descending : Sort.Direction.Ascending
         );
 
         int effectivePage = Math.max(page, 0);
@@ -119,88 +136,102 @@ public class ImageResource {
 
         List<Image> images = query.page(effectivePage, size).list();
 
+        // HATEOAS
+        images.forEach(img -> {
+            img.links = Map.of(
+                    "self", "/image/" + img.id,
+                    "update", "/image/" + img.id,
+                    "delete", "/image/" + img.id,
+                    "all", "/image"
+            );
+        });
+
         return Response.ok(images).build();
     }
 
+    // --------------------------
+    // INSERT
+    // --------------------------
     @POST
     @Operation(
             summary = "Inserir imagem",
-            description = "Adiciona uma imagem via POST com corpo JSON"
+            description = "Adiciona uma imagem via POST"
     )
     @RequestBody(
             required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class))
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = Image.class)
+            )
     )
-    @APIResponse(
-            responseCode = "201",
-            description = "Imagem criada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class))
-    )
-    @APIResponse(
-            responseCode = "400",
-            description = "Requisição inválida",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
+    @APIResponse(responseCode = "201", description = "Imagem criada com sucesso")
+    @APIResponse(responseCode = "400", description = "Requisição inválida")
     @Transactional
     public Response insert(Image image) {
+
         Image.persist(image);
+
+        // HATEOAS
+        image.links = Map.of(
+                "self", "/image/" + image.id,
+                "update", "/image/" + image.id,
+                "delete", "/image/" + image.id,
+                "all", "/image"
+        );
+
         return Response.status(Response.Status.CREATED).entity(image).build();
     }
 
+    // --------------------------
+    // DELETE
+    // --------------------------
     @DELETE
+    @Path("{id}")
     @Operation(
             summary = "Deletar imagem",
             description = "Remove uma imagem pelo ID"
     )
-    @APIResponse(
-            responseCode = "204",
-            description = "Sem conteúdo",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Imagem não encontrada",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
     @Transactional
-    @Path("{id}")
     public Response delete(@PathParam("id") long id) {
+
         Image entity = Image.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
         Image.deleteById(id);
+
         return Response.noContent().build();
     }
 
+    // --------------------------
+    // UPDATE
+    // --------------------------
     @PUT
+    @Path("{id}")
     @Operation(
             summary = "Editar imagem",
-            description = "Edita uma imagem pelo ID e corpo JSON"
-    )
-    @RequestBody(
-            required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class))
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Imagem editada com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Image.class, type = SchemaType.ARRAY))
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Imagem não encontrada",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
+            description = "Edita uma imagem pelo ID"
     )
     @Transactional
-    @Path("{id}")
     public Response update(@PathParam("id") long id, Image newImage) {
+
         Image entity = Image.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
         entity.url = newImage.url;
         entity.description = newImage.description;
-        return Response.status(Response.Status.OK).entity(entity).build();
+
+        // HATEOAS
+        entity.links = Map.of(
+                "self", "/image/" + entity.id,
+                "update", "/image/" + entity.id,
+                "delete", "/image/" + entity.id,
+                "all", "/image"
+        );
+
+        return Response.ok(entity).build();
     }
 }

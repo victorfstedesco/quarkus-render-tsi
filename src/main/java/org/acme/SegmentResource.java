@@ -14,89 +14,85 @@ import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Path("/segment")
 public class SegmentResource {
 
+    // --------------------------
+    // GET ALL
+    // --------------------------
     @GET
-    @Operation(
-            summary = "Todos os segmentos (getAll)",
-            description = "Lista de segmentos no formato JSON"
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Sucesso",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY)
-            )
-    )
+    @Operation(summary = "Todos os segmentos (getAll)",
+            description = "Lista de segmentos no formato JSON")
+    @APIResponse(responseCode = "200", description = "Sucesso",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY)))
     public Response getAll() {
-        return Response.ok(Segment.listAll()).build();
+
+        List<Segment> list = Segment.listAll();
+
+        // HATEOAS
+        list.forEach(s -> {
+            s.links = Map.of(
+                    "self", "/segment/" + s.id,
+                    "update", "/segment/" + s.id,
+                    "delete", "/segment/" + s.id,
+                    "all", "/segment"
+            );
+        });
+
+        return Response.ok(list).build();
     }
 
+    // --------------------------
+    // GET BY ID
+    // --------------------------
     @GET
     @Path("{id}")
-    @Operation(
-            summary = "Segmento por ID",
-            description = "Retorna um segmento específico pelo ID"
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Sucesso",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY)
-            )
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Segmento não encontrado",
-            content = @Content(
-                    mediaType = "text/plain",
-                    schema = @Schema(implementation = String.class))
-    )
+    @Operation(summary = "Segmento por ID", description = "Retorna um segmento específico pelo ID")
+    @APIResponse(responseCode = "200", description = "Sucesso",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = Segment.class)))
+    @APIResponse(responseCode = "404", description = "Segmento não encontrado")
     public Response getById(
-            @Parameter(description = "ID do segmento para busca", required = true)
+            @Parameter(description = "ID do segmento", required = true)
             @PathParam("id") long id) {
+
         Segment entity = Segment.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
+        // HATEOAS
+        entity.links = Map.of(
+                "self", "/segment/" + id,
+                "update", "/segment/" + id,
+                "delete", "/segment/" + id,
+                "all", "/segment"
+        );
+
         return Response.ok(entity).build();
     }
 
+    // --------------------------
+    // SEARCH
+    // --------------------------
     @GET
-    @Operation(
-            summary = "Todos os segmentos com função de busca",
-            description = "Todos os resultados no formato JSON"
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Sucesso",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY)
-            )
-    )
     @Path("/search")
+    @Operation(summary = "Todos os segmentos com função de busca",
+            description = "Todos os resultados no formato JSON")
+    @APIResponse(responseCode = "200", description = "Sucesso")
     public Response search(
-            @Parameter(description = "Consulta para busca por nome ou descrição")
             @QueryParam("q") String q,
-            @Parameter(description = "Campo para ordenação da lista")
             @QueryParam("sort") @DefaultValue("id") String sort,
-            @Parameter(description = "Direção da ordenação: ascendente ou descendente")
             @QueryParam("direction") @DefaultValue("asc") String direction,
-            @Parameter(description = "Número da página a ser retornada")
             @QueryParam("page") @DefaultValue("0") int page,
-            @Parameter(description = "Quantidade de itens por página")
-            @QueryParam("size") @DefaultValue("4") int size
-    ) {
+            @QueryParam("size") @DefaultValue("4") int size) {
+
         Set<String> allowed = Set.of("id", "name", "description");
-        if (!allowed.contains(sort)) {
-            sort = "id";
-        }
+        if (!allowed.contains(sort)) sort = "id";
 
         Sort sortObj = Sort.by(
                 sort,
@@ -119,88 +115,96 @@ public class SegmentResource {
 
         List<Segment> segments = query.page(effectivePage, size).list();
 
-        return Response.ok(segments).build();
+        // HATEOAS para cada item
+        segments.forEach(s -> {
+            s.links = Map.of(
+                    "self", "/segment/" + s.id,
+                    "update", "/segment/" + s.id,
+                    "delete", "/segment/" + s.id,
+                    "all", "/segment"
+            );
+        });
+
+        var response = new SearchSegmentResponse();
+        response.segment = segments;
+        response.totalSegment = query.list().size();
+        response.totalPages = query.pageCount();
+        response.hasMore = effectivePage < query.pageCount() - 1;
+
+        response.nextPage = response.hasMore
+                ? "/segment/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) + "&size=" + size
+                : "";
+
+        return Response.ok(response).build();
     }
 
+    // --------------------------
+    // INSERT
+    // --------------------------
     @POST
-    @Operation(
-            summary = "Inserir segmento",
-            description = "Adiciona um segmento via POST com corpo JSON"
-    )
-    @RequestBody(
-            required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class))
-    )
-    @APIResponse(
-            responseCode = "201",
-            description = "Segmento criado com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class))
-    )
-    @APIResponse(
-            responseCode = "400",
-            description = "Requisição inválida",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
+    @Operation(summary = "Inserir segmento", description = "Adiciona um segmento via POST")
+    @RequestBody(required = true,
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = Segment.class)))
     @Transactional
     public Response insert(Segment segment) {
+
         Segment.persist(segment);
+
+        // HATEOAS
+        segment.links = Map.of(
+                "self", "/segment/" + segment.id,
+                "update", "/segment/" + segment.id,
+                "delete", "/segment/" + segment.id,
+                "all", "/segment"
+        );
+
         return Response.status(Response.Status.CREATED).entity(segment).build();
     }
 
+    // --------------------------
+    // DELETE
+    // --------------------------
     @DELETE
-    @Operation(
-            summary = "Deletar segmento",
-            description = "Remove um segmento pelo ID"
-    )
-    @APIResponse(
-            responseCode = "204",
-            description = "Sem conteúdo",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Segmento não encontrado",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
-    @Transactional
     @Path("{id}")
+    @Operation(summary = "Deletar segmento", description = "Remove um segmento pelo ID")
+    @Transactional
     public Response delete(@PathParam("id") long id) {
+
         Segment entity = Segment.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
         Segment.deleteById(id);
         return Response.noContent().build();
     }
 
+    // --------------------------
+    // UPDATE
+    // --------------------------
     @PUT
-    @Operation(
-            summary = "Editar segmento",
-            description = "Edita um segmento pelo ID e corpo JSON"
-    )
-    @RequestBody(
-            required = true,
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class))
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Segmento editado com sucesso",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Segment.class, type = SchemaType.ARRAY))
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Segmento não encontrado",
-            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class))
-    )
-    @Transactional
     @Path("{id}")
+    @Operation(summary = "Editar segmento", description = "Edita um segmento pelo ID")
+    @Transactional
     public Response update(@PathParam("id") long id, Segment newSegment) {
+
         Segment entity = Segment.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
+
         entity.name = newSegment.name;
         entity.description = newSegment.description;
-        return Response.status(Response.Status.OK).entity(entity).build();
+
+        // HATEOAS
+        entity.links = Map.of(
+                "self", "/segment/" + entity.id,
+                "update", "/segment/" + entity.id,
+                "delete", "/segment/" + entity.id,
+                "all", "/segment"
+        );
+
+        return Response.ok(entity).build();
     }
 }

@@ -3,6 +3,8 @@ package org.acme;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 
+import java.util.Map;
+
 @Entity
 public class Brand extends PanacheEntityBase {
     @Id
@@ -12,12 +14,13 @@ public class Brand extends PanacheEntityBase {
     public String name;
     public String description;
 
-    // Se quiser manter logoUrl como campo simples:
     // public String logoUrl;
 
     // Ou como relação com a entidade Image:
     @OneToOne
     public Image logo;
+    @Transient
+    public Map<String, String> links;
 
     public String websiteUrl;
     public int release;

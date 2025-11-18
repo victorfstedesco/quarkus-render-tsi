@@ -1,10 +1,9 @@
 package org.acme;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
+
+import java.util.Map;
 
 @Entity
 public class Segment extends PanacheEntityBase {
@@ -14,6 +13,8 @@ public class Segment extends PanacheEntityBase {
 
     public String name;
     public String description;
+    @Transient
+    public Map<String, String> links;
 
     public Segment() {
     }
