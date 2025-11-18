@@ -24,8 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Path("/brand")
-public class BrandResource {
+@Path("/image")
+public class ImageResource {
 
     // =========================================================
     // GET ALL
@@ -40,20 +40,28 @@ public class BrandResource {
             successThreshold = 1
     )
     @Fallback(fallbackMethod = "getAllFallback")
-    @Operation(summary = "Todas as marcas (getAll)", description = "Lista de marcas no formato JSON")
-    @APIResponse(responseCode = "200", description = "Sucesso",
-            content = @Content(mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class, type = SchemaType.ARRAY)))
+    @Operation(
+            summary = "Todas as imagens (getAll)",
+            description = "Lista de imagens no formato JSON"
+    )
+    @APIResponse(
+            responseCode = "200",
+            description = "Sucesso",
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = Image.class, type = SchemaType.ARRAY)
+            )
+    )
     public Response getAll() {
 
-        List<Brand> list = Brand.listAll();
+        List<Image> list = Image.listAll();
 
-        list.forEach(b -> {
-            b.links = Map.of(
-                    "self", "/brand/" + b.id,
-                    "update", "/brand/" + b.id,
-                    "delete", "/brand/" + b.id,
-                    "all", "/brand"
+        list.forEach(img -> {
+            img.links = Map.of(
+                    "self", "/image/" + img.id,
+                    "update", "/image/" + img.id,
+                    "delete", "/image/" + img.id,
+                    "all", "/image"
             );
         });
 
@@ -62,7 +70,7 @@ public class BrandResource {
 
     public Response getAllFallback() {
         return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity("Serviço indisponível no momento. (brand.getAll)")
+                .entity("Serviço indisponível para listar imagens.")
                 .build();
     }
 
@@ -81,22 +89,33 @@ public class BrandResource {
             successThreshold = 1
     )
     @Fallback(fallbackMethod = "getByIdFallback")
-    @Operation(summary = "Marca por ID", description = "Retorna uma marca específica pelo ID")
-    @APIResponse(responseCode = "200", description = "Sucesso",
-            content = @Content(mediaType = "application/json",
-                    schema = @Schema(implementation = Brand.class)))
-    public Response getById(@PathParam("id") long id) {
+    @Operation(
+            summary = "Imagem por ID",
+            description = "Retorna uma imagem específica pelo ID"
+    )
+    @APIResponse(
+            responseCode = "200",
+            description = "Sucesso",
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = Image.class)
+            )
+    )
+    @APIResponse(responseCode = "404", description = "Imagem não encontrada")
+    public Response getById(
+            @Parameter(description = "ID da imagem", required = true)
+            @PathParam("id") long id) {
 
-        Brand entity = Brand.findById(id);
+        Image entity = Image.findById(id);
         if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
         entity.links = Map.of(
-                "self", "/brand/" + id,
-                "update", "/brand/" + id,
-                "delete", "/brand/" + id,
-                "all", "/brand"
+                "self", "/image/" + id,
+                "update", "/image/" + id,
+                "delete", "/image/" + id,
+                "all", "/image"
         );
 
         return Response.ok(entity).build();
@@ -104,7 +123,7 @@ public class BrandResource {
 
     public Response getByIdFallback(long id) {
         return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity("Falha ao buscar marca id=" + id)
+                .entity("Serviço indisponível ao buscar imagem id=" + id)
                 .build();
     }
 
@@ -123,7 +142,7 @@ public class BrandResource {
             successThreshold = 1
     )
     @Fallback(fallbackMethod = "searchFallback")
-    @Operation(summary = "Busca marcas", description = "Busca com paginação e ordenação")
+    @Operation(summary = "Busca imagens", description = "Retorna todas as imagens com filtros")
     public Response search(
             @QueryParam("q") String q,
             @QueryParam("sort") @DefaultValue("id") String sort,
@@ -132,56 +151,47 @@ public class BrandResource {
             @QueryParam("size") @DefaultValue("4") int size
     ) {
 
-        Set<String> allowed = Set.of("id", "name", "description", "websiteUrl", "release");
+        Set<String> allowed = Set.of("id", "url", "description");
         if (!allowed.contains(sort)) sort = "id";
 
         Sort sortObj = Sort.by(
                 sort,
-                direction.equalsIgnoreCase("desc") ?
-                        Sort.Direction.Descending : Sort.Direction.Ascending
+                direction.equalsIgnoreCase("desc")
+                        ? Sort.Direction.Descending
+                        : Sort.Direction.Ascending
         );
 
         int effectivePage = Math.max(page, 0);
 
-        PanacheQuery<Brand> query;
+        PanacheQuery<Image> query;
 
         if (q == null || q.isBlank()) {
-            query = Brand.findAll(sortObj);
+            query = Image.findAll(sortObj);
         } else {
-            try {
-                int numero = Integer.parseInt(q);
-                query = Brand.find("release = ?1", sortObj, numero);
-            } catch (NumberFormatException e) {
-                query = Brand.find("lower(name) like ?1", sortObj, "%" + q.toLowerCase() + "%");
-            }
+            query = Image.find(
+                    "lower(url) like ?1 or lower(description) like ?1",
+                    sortObj,
+                    "%" + q.toLowerCase() + "%"
+            );
         }
 
-        List<Brand> brands = query.page(effectivePage, size).list();
+        List<Image> images = query.page(effectivePage, size).list();
 
-        brands.forEach(b -> {
-            b.links = Map.of(
-                    "self", "/brand/" + b.id,
-                    "update", "/brand/" + b.id,
-                    "delete", "/brand/" + b.id,
-                    "all", "/brand"
+        images.forEach(img -> {
+            img.links = Map.of(
+                    "self", "/image/" + img.id,
+                    "update", "/image/" + img.id,
+                    "delete", "/image/" + img.id,
+                    "all", "/image"
             );
         });
 
-        var response = new SearchBrandResponse();
-        response.Brand = brands;
-        response.TotalBrand = query.list().size();
-        response.TotalPages = query.pageCount();
-        response.HasMore = effectivePage < query.pageCount() - 1;
-        response.NextPage = response.HasMore ?
-                "/brand/search?q=" + (q != null ? q : "") + "&page=" + (effectivePage + 1) :
-                "";
-
-        return Response.ok(response).build();
+        return Response.ok(images).build();
     }
 
     public Response searchFallback(String q, String sort, String direction, int page, int size) {
         return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity("Serviço indisponível na busca de marcas.")
+                .entity("Serviço indisponível para buscar imagens.")
                 .build();
     }
 
@@ -199,31 +209,36 @@ public class BrandResource {
             successThreshold = 1
     )
     @Fallback(fallbackMethod = "insertFallback")
-    @Operation(summary = "Inserir marca", description = "Adiciona uma nova marca")
+    @Operation(
+            summary = "Inserir imagem",
+            description = "Adiciona uma imagem via POST"
+    )
+    @RequestBody(
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = Image.class)
+            )
+    )
+    @APIResponse(responseCode = "201", description = "Imagem criada com sucesso")
     @Transactional
-    public Response insert(Brand brand) {
+    public Response insert(Image image) {
 
-        if (brand.logo != null && brand.logo.id != null)
-            brand.logo = Image.findById(brand.logo.id);
+        Image.persist(image);
 
-        if (brand.segment != null && brand.segment.id != null)
-            brand.segment = Segment.findById(brand.segment.id);
-
-        Brand.persist(brand);
-
-        brand.links = Map.of(
-                "self", "/brand/" + brand.id,
-                "update", "/brand/" + brand.id,
-                "delete", "/brand/" + brand.id,
-                "all", "/brand"
+        image.links = Map.of(
+                "self", "/image/" + image.id,
+                "update", "/image/" + image.id,
+                "delete", "/image/" + image.id,
+                "all", "/image"
         );
 
-        return Response.status(Response.Status.CREATED).entity(brand).build();
+        return Response.status(Response.Status.CREATED).entity(image).build();
     }
 
-    public Response insertFallback(Brand brand) {
+    public Response insertFallback(Image image) {
         return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity("Falha ao inserir marca.")
+                .entity("Serviço indisponível ao inserir imagem.")
                 .build();
     }
 
@@ -242,20 +257,26 @@ public class BrandResource {
             successThreshold = 1
     )
     @Fallback(fallbackMethod = "deleteFallback")
+    @Operation(
+            summary = "Deletar imagem",
+            description = "Remove uma imagem pelo ID"
+    )
     @Transactional
     public Response delete(@PathParam("id") long id) {
 
-        Brand entity = Brand.findById(id);
-        if (entity == null)
+        Image entity = Image.findById(id);
+        if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
+        }
 
-        Brand.deleteById(id);
+        Image.deleteById(id);
+
         return Response.noContent().build();
     }
 
     public Response deleteFallback(long id) {
         return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity("Falha ao deletar marca id=" + id)
+                .entity("Serviço indisponível ao deletar imagem id=" + id)
                 .build();
     }
 
@@ -274,37 +295,34 @@ public class BrandResource {
             successThreshold = 1
     )
     @Fallback(fallbackMethod = "updateFallback")
+    @Operation(
+            summary = "Editar imagem",
+            description = "Edita uma imagem pelo ID"
+    )
     @Transactional
-    public Response update(@PathParam("id") long id, Brand newBrand) {
+    public Response update(@PathParam("id") long id, Image newImage) {
 
-        Brand entity = Brand.findById(id);
-        if (entity == null)
+        Image entity = Image.findById(id);
+        if (entity == null) {
             return Response.status(Response.Status.NOT_FOUND).build();
+        }
 
-        entity.name = newBrand.name;
-        entity.description = newBrand.description;
-        entity.websiteUrl = newBrand.websiteUrl;
-        entity.release = newBrand.release;
-
-        if (newBrand.logo != null && newBrand.logo.id != null)
-            entity.logo = Image.findById(newBrand.logo.id);
-
-        if (newBrand.segment != null && newBrand.segment.id != null)
-            entity.segment = Segment.findById(newBrand.segment.id);
+        entity.url = newImage.url;
+        entity.description = newImage.description;
 
         entity.links = Map.of(
-                "self", "/brand/" + entity.id,
-                "update", "/brand/" + entity.id,
-                "delete", "/brand/" + entity.id,
-                "all", "/brand"
+                "self", "/image/" + entity.id,
+                "update", "/image/" + entity.id,
+                "delete", "/image/" + entity.id,
+                "all", "/image"
         );
 
         return Response.ok(entity).build();
     }
 
-    public Response updateFallback(long id, Brand newBrand) {
+    public Response updateFallback(long id, Image newImage) {
         return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity("Falha ao atualizar marca id=" + id)
+                .entity("Serviço indisponível ao atualizar imagem id=" + id)
                 .build();
     }
 }
